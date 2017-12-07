@@ -52,12 +52,19 @@ patient_data = {
 
 }
 
+# Graph counter
+path = 'static/graphs/real'
+
+def clear_graphs():
+    for f in os.listdir(path):
+        os.remove(path + '/' + f)
+
 
 # Global variables for graphing
-LRL = 1500.0 # milliseconds
-URL = 600.0 # milliseconds
+LRL = 1500.0  # milliseconds
+URL = 600.0  # milliseconds
 
-x = [float(i+1) for i in range(5)]
+x = [float(-1 * i) for i in range(5,0,-1)]
 
 # Conversion to beats per minute
 LRL_data = [1000.0/LRL for i in range(5)]
@@ -71,6 +78,7 @@ heart_data = [0.0 for i in range(5)]
 slow_alarms = ["" for i in range(5)]
 fast_alarms = ["" for i in range(5)]
 
+# MQTT
 broker_address = "35.188.242.1"
 port = 1883
 timeout = 60
@@ -105,7 +113,11 @@ def on_message(client, userdata, msg):
     elif "fast" in msg.payload:
         add_data(fast_alarms, msg.payload)
     else:
-        add_data(heart_data, float(msg.payload))
+        pieces = msg.payload.split(':')
+        timestamp = float(pieces[0])
+        heart_val = float(pieces[1])
+        add_data(x, timestamp)
+        add_data(heart_data, heart_val)
 
     print(msg.topic+" "+str(msg.payload) + '\n')
 
@@ -123,10 +135,7 @@ client.loop_start()
 
 nav = Nav()
 
-def delete_old_graphs():
-    files = [f for f in os.listdir('./static/graphs')]
-    for f in files:
-        os.remove(f)
+
 
 def get_patients():
     patients = []
@@ -145,7 +154,7 @@ def mynavbar():
     return Navbar(
         'Pacemaker Project',
         View('Dashboard', 'index'),
-        View('About', 'about')
+        # View('About', 'about')
     )
 
 app = Flask(__name__)
@@ -189,16 +198,32 @@ def alarms_ep():
         else:
             alarm_type = "fast"
 
+        timestamp = float(all_alarms[i].split(':')[0])
 
         notifications.append({
-            'id': i,
+            'timestamp': timestamp,
             'type': alarm_type
         })
+
+    def compare(a, b):
+        if a["timestamp"] > b["timestamp"]:
+            return 1
+        elif a["timestamp"] == b["timestamp"]:
+            return 0
+        else:
+            return -1
+
+    notifications.sort(compare)
+
+    notifications.reverse()
+
 
     return jsonify(notifications)
 
 @app.route('/graph')
 def graph_ep():
+    clear_graphs()
+
 
     fig = plt.figure()
 
